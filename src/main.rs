@@ -20,7 +20,7 @@ struct Args {
     verbose: bool,
 
     /// The subnet to generate ips for (use x to denote a wildcard)
-    #[arg(short, long, default_value_t = String::from("10.208.2.x"))]
+    #[arg(short, long, default_value_t = String::from("10.208.x.x"))]
     ip_subnet: String,
 }
 
