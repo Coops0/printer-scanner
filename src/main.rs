@@ -2,23 +2,32 @@ use std::time::Duration;
 use reqwest::{Client, StatusCode};
 use anyhow::Result;
 use clap::Parser;
+use tokio::fs::File;
+use tokio::io::AsyncWriteExt;
 use tokio::task::JoinSet;
 
 const PRINTER_PAGE: &str = "/hp/device/";
 
 #[derive(Parser, Debug, Clone)]
-#[command(author, version, about, long_about = None)]
+#[command(long_about = None)]
 struct Args {
+    /// Amount of threads to simultaneously request on
     #[arg(short, long, default_value_t = 10)]
     threads: usize,
 
+    /// Log failures as well
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
+
+    /// The subnet to generate ips for
+    #[arg(short, long, default_value_t = String::from("10.208.2.x"))]
+    ip_subnet: String,
 }
 
 #[derive(Debug)]
 enum ScanError {
     Timeout,
+    Connection,
     NotOk(StatusCode),
     OtherError(reqwest::Error),
 }
@@ -26,12 +35,35 @@ enum ScanError {
 #[tokio::main]
 async fn main() {
     let args = Args::parse();
-    let mut server_range = vec![];
-    for i in 1..255 {
-        for ii in 1..255 {
-            server_range.push(format!("10.208.{i}.{ii}"));
+
+    let server_range = {
+        let mut server_range: Vec<String> = vec![];
+        let mut ip_sample = args.ip_subnet.clone();
+        loop {
+            if !ip_sample.contains("x") {
+                server_range.retain(|s| !s.contains("x"));
+                break;
+            }
+
+
+            let mut current_range = server_range.clone();
+            if current_range.is_empty() {
+                current_range.push(ip_sample.clone());
+            }
+
+            for ip in current_range {
+                for i in 1..255 {
+                    server_range.push(ip.replacen("x", &i.to_string(), 1));
+                }
+            }
+
+            ip_sample = server_range.last().unwrap().clone();
         }
-    }
+
+        server_range
+    };
+
+    println!("Parsed {} ips to scan, start using {} threads", server_range.len(), args.threads);
 
     let mut set = JoinSet::new();
     let chunks = server_range.chunks(args.threads);
@@ -46,7 +78,23 @@ async fn main() {
         }
     }
 
-    println!("-- FINISHED --");
+    let printers = printers.concat();
+
+    println!("-- Finished, found {} valid printers --", printers.len());
+
+    let content = printers.join("\n");
+
+
+    let _ = tokio::fs::remove_file("./printers.txt").await;
+
+    File::create("./printers.txt")
+        .await
+        .unwrap()
+        .write(content.as_bytes())
+        .await
+        .unwrap();
+
+    println!("Successfully wrote to ./printers.txt");
     // for printer in printers {
     //     println!("{printer}{PRINTER_PAGE}");
     // }
@@ -73,12 +121,13 @@ async fn scanner_thread(servers: Vec<String>, args: Args) -> Result<Vec<String>>
                         println!("Invalid printer {server}");
                     }
                 }
-                ScanError::NotOk(s) => {
-                    println!("Weird status {s} on printer https://{server}{PRINTER_PAGE}");
+                ScanError::Connection => {
+                    if args.verbose {
+                        println!("Connection error {server}");
+                    }
                 }
-                ScanError::OtherError(e) => {
-                    println!("Got other error {e:?} on printer https://{server}{PRINTER_PAGE}");
-                }
+                ScanError::NotOk(s) => println!("Weird status {s} on printer https://{server}{PRINTER_PAGE}"),
+                ScanError::OtherError(e) => println!("Got other error {e:?} on printer https://{server}{PRINTER_PAGE}")
             }
         }
     }
@@ -106,6 +155,10 @@ async fn scan(client: &mut Client, server: &String) -> std::result::Result<(), S
 
     if error.is_timeout() {
         return Err(ScanError::Timeout);
+    }
+
+    if error.is_connect() {
+        return Err(ScanError::Connection);
     }
 
     println!("weird error on https://{server}{PRINTER_PAGE} -> {error:?}");
