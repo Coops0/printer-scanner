@@ -19,7 +19,7 @@ struct Args {
     #[arg(short, long, default_value_t = false)]
     verbose: bool,
 
-    /// The subnet to generate ips for
+    /// The subnet to generate ips for (use x to denote a wildcard)
     #[arg(short, long, default_value_t = String::from("10.208.2.x"))]
     ip_subnet: String,
 }
@@ -147,7 +147,7 @@ async fn scan(client: &mut Client, server: &String) -> std::result::Result<(), S
                 return Ok(());
             }
 
-            println!("non-successive code {} on https://{server}{PRINTER_PAGE}", o.status());
+            // println!("non-successive code {} on https://{server}{PRINTER_PAGE}", o.status());
             return Err(ScanError::NotOk(o.status()));
         }
         Err(e) => e,
