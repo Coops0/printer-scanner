@@ -1,27 +1,35 @@
-use std::fmt::{Display, Formatter};
-use std::net::Ipv4Addr;
-use std::time::Duration;
-
+use std::{
+    fmt::{Display, Formatter},
+    time::Duration
+};
 use anyhow::Result;
 use indicatif::ProgressBar;
-use ipnet::Ipv4Net;
+use rand::seq::SliceRandom;
 use reqwest::{Client, StatusCode};
 use thiserror::Error;
-use tokio::fs::File;
-use tokio::io::AsyncWriteExt;
-use tokio::sync::mpsc;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
-use tokio::task;
-use tokio::task::JoinSet;
+use tokio::{
+    fs::File,
+    io::AsyncWriteExt,
+    sync::{
+        mpsc,
+        mpsc::{UnboundedReceiver, UnboundedSender}
+    },
+    task::{
+        self,
+        JoinSet
+    }
+};
 
-use crate::Args;
+use crate::{Args, subnet_generator};
 
 pub const PRINTER_PAGE: &str = "/hp/device/";
 
 pub async fn scan_for_printers(args: Args) -> Result<()> {
-    let net: Ipv4Net = args.ip_subnet.parse()?;
+    // let net: Ipv4Net = args.ip_subnet.parse()?;
+    let net = subnet_generator(args.ip_subnet.clone());
 
-    let hosts = net.hosts()
+    let hosts = net//.hosts()
+        .into_iter()
         .map(IpWrapper)
         .collect::<Vec<IpWrapper>>();
 
@@ -37,14 +45,31 @@ pub async fn scan_for_printers(args: Args) -> Result<()> {
 
     println!("Parsed {} ips to scan, start using {} threads chunked into arrays with an avg length of {avg}", hosts.len(), args.threads);
 
-    let (sender, receiver) = mpsc::unbounded_channel();
-    task::spawn(progress_bar_task(hosts.len() as u64, receiver));
+    if hosts.len() > 10 {
+        let sample = hosts
+            .choose_multiple(&mut rand::thread_rng(), 10)
+            .map(|i| i.0.clone())
+            .collect::<Vec<String>>()
+            .join(", ");
 
-    let mut set = JoinSet::new();
-    for servers in chunks {
-        set.spawn(scanner_thread(servers.to_vec(), args.clone(), sender.clone()));
+        println!("10 randomly sampled generated IPs: {sample}")
     }
 
+    let mut progress_bar_scanner = None;
+    if args.progress_bar {
+        let (sender, receiver) = mpsc::unbounded_channel();
+        progress_bar_scanner = Some(sender);
+
+        task::spawn(progress_bar_task(hosts.len() as u64, receiver));
+    }
+
+    println!("Spawning threads...");
+    let mut set = JoinSet::new();
+    for servers in chunks {
+        set.spawn(scanner_thread(servers.to_vec(), args.clone(), progress_bar_scanner.clone()));
+    }
+
+    println!("Spawned all threads!");
     let mut printers = vec![];
     while let Some(res) = set.join_next().await {
         if let Ok(r) = res.unwrap() {
@@ -75,7 +100,7 @@ pub async fn scan_for_printers(args: Args) -> Result<()> {
     Ok(())
 }
 
-async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: UnboundedSender<()>) -> Result<Vec<IpWrapper>> {
+async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<()>>) -> Result<Vec<IpWrapper>> {
     let mut client = Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(Duration::from_secs(10))
@@ -91,23 +116,24 @@ async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: UnboundedSe
             }
             Err(e) => match e {
                 ScanError::Timeout | ScanError::Connection => if args.verbose {
-                    println!("{e} {server}");
+                    println!("{server} {e}");
                 },
                 _ => println!("{server} {e}")
             }
         }
 
-        let _ = sender.send(());
+        if let Some(ref sender) = sender {
+            let _ = sender.send(());
+        }
     }
 
     Ok(new_servers)
 }
 
-async fn scan(client: &mut Client, server: &IpWrapper) -> std::result::Result<(), ScanError> {
+async fn scan(client: &mut Client, server: &IpWrapper) -> Result<(), ScanError> {
     let res = client.get(server.url())
         .send()
         .await;
-
 
     let error = match res {
         Ok(o) => {
@@ -148,7 +174,7 @@ async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<()>) {
 }
 
 #[derive(Clone)]
-pub struct IpWrapper(pub Ipv4Addr);
+pub struct IpWrapper(pub String);
 
 impl IpWrapper {
     pub fn url(&self) -> String {
