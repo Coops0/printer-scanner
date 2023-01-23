@@ -84,18 +84,20 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
         task::spawn(progress_bar_task(hosts.len() as u64, receiver));
     }
 
-    println!("Spawning threads...");
     let mut set = JoinSet::new();
     for servers in chunks {
         set.spawn(scanner_thread(servers.to_vec(), args.clone(), progress_bar_scanner.clone()));
     }
 
-    println!("Spawned all threads!");
     let mut devices = vec![];
     while let Some(res) = set.join_next().await {
         if let Ok(r) = res.unwrap() {
             devices.push(r);
         }
+    }
+
+    if let Some(s) = progress_bar_scanner {
+        let _ = s.send(ProgressBarMessage::Close);
     }
 
     let devices = devices.concat();
@@ -186,6 +188,7 @@ async fn scan(client: &mut Client, server: &IpWrapper) -> Result<NetworkDevice, 
 enum ProgressBarMessage {
     Increment,
     Message(String),
+    Close,
 }
 
 async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
@@ -195,8 +198,9 @@ async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<ProgressBarMe
             Some(m) => match m {
                 ProgressBarMessage::Increment => pb.inc(1),
                 ProgressBarMessage::Message(m) => pb.println(m),
+                ProgressBarMessage::Close => pb.finish_with_message("prematurely done scanning")
             },
-            None => pb.abandon_with_message("channel was closed unexpectedly")
+            None => return,
         }
 
         if amount <= pb.position() {
