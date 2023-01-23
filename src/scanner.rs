@@ -1,30 +1,32 @@
 use std::{
     fmt::{Display, Formatter},
-    time::Duration
+    time::Duration,
 };
-use anyhow::Result;
+use anyhow::{Result};
 use indicatif::ProgressBar;
 use rand::seq::SliceRandom;
-use reqwest::{Client, StatusCode};
+use reqwest::{Client};
 use thiserror::Error;
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
     sync::{
         mpsc,
-        mpsc::{UnboundedReceiver, UnboundedSender}
+        mpsc::{UnboundedReceiver, UnboundedSender},
     },
     task::{
         self,
-        JoinSet
-    }
+        JoinSet,
+    },
 };
 
-use crate::{Args, subnet_generator};
+use crate::{
+    Args,
+    subnet_generator,
+    identifier::NetworkDevice,
+};
 
-pub const PRINTER_PAGE: &str = "/hp/device/";
-
-pub async fn scan_for_printers(args: Args) -> Result<()> {
+pub async fn scan_for_devices(args: Args) -> Result<()> {
     // let net: Ipv4Net = args.ip_subnet.parse()?;
     let net = subnet_generator(args.ip_subnet.clone());
 
@@ -33,7 +35,26 @@ pub async fn scan_for_printers(args: Args) -> Result<()> {
         .map(IpWrapper)
         .collect::<Vec<IpWrapper>>();
 
-    let chunks = hosts.chunks(args.threads)
+    if args.print_all {
+        let _ = tokio::fs::remove_file("./all_ips.txt").await;
+
+        let _ = File::create("./all_ips.txt")
+            .await
+            .unwrap()
+            .write(
+                hosts
+                    .iter()
+                    .map(|i| i.0.clone())
+                    .collect::<Vec<String>>()
+                    .join("\n")
+                    .as_bytes()
+            )
+            .await?;
+
+        println!("Printed all ips!");
+    }
+
+    let chunks = hosts.chunks(hosts.len() / args.threads)
         .collect::<Vec<&[IpWrapper]>>();
 
     let avg = {
@@ -70,37 +91,36 @@ pub async fn scan_for_printers(args: Args) -> Result<()> {
     }
 
     println!("Spawned all threads!");
-    let mut printers = vec![];
+    let mut devices = vec![];
     while let Some(res) = set.join_next().await {
         if let Ok(r) = res.unwrap() {
-            printers.push(r);
+            devices.push(r);
         }
     }
 
-    let printers = printers.concat();
+    let devices = devices.concat();
+    println!("-- Finished, found {} valid devices --", devices.len());
 
-    println!("-- Finished, found {} valid printers --", printers.len());
-
-    let content = printers
+    let content = devices
         .iter()
-        .map(ToString::to_string)
+        .map(|d| format!("{}:{}", d.0, d.1))
         .collect::<Vec<String>>()
         .join("\n");
 
-    let _ = tokio::fs::remove_file("./printers.txt").await;
+    let _ = tokio::fs::remove_file("./devices.txt").await;
 
-    let _ = File::create("./printers.txt")
+    let _ = File::create("./devices.txt")
         .await
         .unwrap()
         .write(content.as_bytes())
         .await?;
 
-    println!("Successfully wrote to ./printers.txt");
+    println!("Successfully wrote to ./devices.txt");
 
     Ok(())
 }
 
-async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<()>>) -> Result<Vec<IpWrapper>> {
+async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<ProgressBarMessage>>) -> Result<Vec<(IpWrapper, NetworkDevice)>> {
     let mut client = Client::builder()
         .danger_accept_invalid_certs(true)
         .timeout(Duration::from_secs(10))
@@ -109,40 +129,45 @@ async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<Unbo
     let mut new_servers = vec![];
 
     for server in servers {
-        match scan(&mut client, &server).await {
-            Ok(_) => {
-                println!("Valid printer page on {}", server.url());
-                new_servers.push(server);
+        let log = match scan(&mut client, &server).await {
+            Ok(t) => {
+                let m = format!("Valid device type of {t} on {}", server.url());
+                new_servers.push((server.clone(), t.clone()));
+
+                m
             }
             Err(e) => match e {
-                ScanError::Timeout | ScanError::Connection => if args.verbose {
-                    println!("{server} {e}");
-                },
-                _ => println!("{server} {e}")
+                ScanError::Timeout | ScanError::Connection => {
+                    if args.verbose {
+                        format!("{server} {e}")
+                    } else {
+                        String::new()
+                    }
+                }
+                _ => format!("{server} {e}")
             }
-        }
+        };
 
         if let Some(ref sender) = sender {
-            let _ = sender.send(());
+            if !log.is_empty() {
+                let _ = sender.send(ProgressBarMessage::Message(log));
+            }
+            let _ = sender.send(ProgressBarMessage::Increment);
         }
     }
 
     Ok(new_servers)
 }
 
-async fn scan(client: &mut Client, server: &IpWrapper) -> Result<(), ScanError> {
+async fn scan(client: &mut Client, server: &IpWrapper) -> Result<NetworkDevice, ScanError> {
     let res = client.get(server.url())
         .send()
         .await;
 
     let error = match res {
         Ok(o) => {
-            if o.status() == StatusCode::OK {
-                return Ok(());
-            }
-
-            // println!("non-successive code {} on https://{server}{PRINTER_PAGE}", o.status());
-            return Err(ScanError::NotOk(o.status()));
+            let text = o.text().await.unwrap_or_default();
+            return Ok(NetworkDevice::from_response(text));
         }
         Err(e) => e,
     };
@@ -155,15 +180,22 @@ async fn scan(client: &mut Client, server: &IpWrapper) -> Result<(), ScanError> 
         return Err(ScanError::Connection);
     }
 
-    // println!("weird error on {} -> {error:?}", server.url());
     Err(ScanError::OtherError(error))
 }
 
-async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<()>) {
+enum ProgressBarMessage {
+    Increment,
+    Message(String),
+}
+
+async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
     let pb = ProgressBar::new(amount);
     loop {
         match rec.recv().await {
-            Some(_) => pb.inc(1),
+            Some(m) => match m {
+                ProgressBarMessage::Increment => pb.inc(1),
+                ProgressBarMessage::Message(m) => pb.println(m),
+            },
             None => pb.abandon_with_message("channel was closed unexpectedly")
         }
 
@@ -173,12 +205,13 @@ async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<()>) {
     }
 }
 
+
 #[derive(Clone)]
 pub struct IpWrapper(pub String);
 
 impl IpWrapper {
     pub fn url(&self) -> String {
-        format!("https://{}{PRINTER_PAGE}", self.0)
+        format!("https://{}", self.0)
     }
 }
 
@@ -192,10 +225,8 @@ impl Display for IpWrapper {
 enum ScanError {
     #[error("timeout occurred after 10s")]
     Timeout,
-    #[error("connection failed / usually bad host")]
+    #[error("connection failed")]
     Connection,
-    #[error("status code was not 200, was instead {0:?}")]
-    NotOk(StatusCode),
     #[error("other weird web error {0:?}")]
     OtherError(reqwest::Error),
 }
