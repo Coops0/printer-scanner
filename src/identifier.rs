@@ -8,6 +8,8 @@ pub enum NetworkDevice {
     CiscoRouter,
     HpPrinter(Printer),
     FileMaker,
+    VirataEmWeb,
+    MitsubishiAC,
     Unidentified,
 }
 
@@ -41,6 +43,7 @@ pub enum Printer {
     ColorLaserJetMfpM577,
     ColorLaserJetM750,
     LaserJetM402dne,
+    LaserJetM402dn,
     LaserJetM605,
     LaserJetProMfpM521dn,
     ColorLaserJetCp5520Series,
@@ -49,6 +52,10 @@ pub enum Printer {
     LaserJetMfpM527,
     LaserJetMfpM227fdw,
     LaserJet500MfpM525,
+    ColorLaserJetFlowMfpM681,
+    LaserJetM203dw,
+    LaserJetMfpM426fdw,
+    LaserJetMfpM635,
 
     UnknownLaserJet,
     UnknownOfficeJet,
@@ -57,7 +64,7 @@ pub enum Printer {
 impl Printer {
     #[allow(dead_code)]
     pub fn is_new(&self) -> bool {
-        matches!(self, Printer::LaserJetMfpM528)
+        matches!(self, Printer::LaserJetMfpM528 | Printer::ColorLaserJetFlowMfpM681 | Printer::LaserJetMfpM635)
     }
 
     pub fn is_unknown(&self) -> bool {
@@ -89,6 +96,8 @@ impl NetworkDevice {
             vec![
                 NetworkDevice::CiscoRouter,
                 NetworkDevice::FileMaker,
+                NetworkDevice::MitsubishiAC,
+                NetworkDevice::VirataEmWeb,
             ],
             all::<Printer>()
                 .collect::<Vec<_>>()
@@ -109,6 +118,8 @@ impl Display for NetworkDevice {
                 p.fmt(f)
             }
             NetworkDevice::FileMaker => f.write_str("FileMaker Database Server Website"),
+            NetworkDevice::VirataEmWeb => f.write_str("Viarta EmWeb"),
+            NetworkDevice::MitsubishiAC => f.write_str("Mitsubishi Air Conditioning"),
             NetworkDevice::Unidentified => f.write_str("Unidentified"),
         }
     }
@@ -121,8 +132,9 @@ impl Display for Printer {
             Printer::LaserJet600M602 => "LaserJet 600 M602",
             Printer::OfficeJetPro8702 => "OfficeJet Pro 8702",
             Printer::ColorLaserJetMfpM577 => "Color LaserJet MFP M577",
-            Printer::ColorLaserJetM750 => "Color LaserJet M570",
+            Printer::ColorLaserJetM750 => "Color LaserJet M750",
             Printer::LaserJetM402dne => "LaserJet M402dne",
+            Printer::LaserJetM402dn => "LaserJet M402dn",
             Printer::LaserJetM605 => "LaserJet M605",
             Printer::LaserJetProMfpM521dn => "LaserJet Pro MFP M521dn",
             Printer::ColorLaserJetCp5520Series => "Color LaserJet CP5520 Series",
@@ -131,6 +143,11 @@ impl Display for Printer {
             Printer::LaserJetMfpM527 => "LaserJet MFP M527",
             Printer::LaserJetMfpM227fdw => "LaserJet MFP M227fdw",
             Printer::LaserJet500MfpM525 => "LaserJet 500 MFP M525",
+            Printer::ColorLaserJetFlowMfpM681 => "Color LaserJet FlowMFP M681",
+            Printer::LaserJetM203dw => "LaserJet M203dw",
+            Printer::LaserJetMfpM426fdw => "LaserJet MFP M426fdw",
+            Printer::LaserJetMfpM635 => "LaserJet MFP M635",
+
             Printer::UnknownLaserJet => "Unknown LaserJet",
             Printer::UnknownOfficeJet => "Unknown OfficeJet",
         };
@@ -146,6 +163,8 @@ impl PageElement for NetworkDevice {
             NetworkDevice::IntegrateDellRemoveAccessController(8) => r#"/start.html">"#,
             NetworkDevice::CiscoRouter => r#"<script>window.onload=function(){ url ='/webui';window.location.href=url;}</script>"#,
             NetworkDevice::FileMaker => "FileMaker Database Server Website",
+            NetworkDevice::VirataEmWeb => "Access Denied. Your IP Address cannot access this device",
+            NetworkDevice::MitsubishiAC => "MITSUBISHI Air Conditioning Control System",
             _ => "",
         };
 

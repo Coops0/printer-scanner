@@ -77,11 +77,12 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
     }
 
     let mut progress_bar_scanner = None;
+    let mut progress_bar_task = None;
     if args.progress_bar {
         let (sender, receiver) = mpsc::unbounded_channel();
         progress_bar_scanner = Some(sender);
 
-        task::spawn(progress_bar_task(hosts.len() as u64, receiver));
+        progress_bar_task = Some(task::spawn(progress_bar_thread(hosts.len() as u64, receiver)));
     }
 
     let mut set = JoinSet::new();
@@ -98,6 +99,7 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
 
     if let Some(s) = progress_bar_scanner {
         let _ = s.send(ProgressBarMessage::Close);
+        let _ = progress_bar_task.unwrap().await;
     }
 
     let devices = devices.concat();
@@ -125,7 +127,7 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
 async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<ProgressBarMessage>>) -> Result<Vec<(IpWrapper, NetworkDevice)>> {
     let mut client = Client::builder()
         .danger_accept_invalid_certs(true)
-        .timeout(Duration::from_secs(10))
+        .timeout(Duration::from_secs(2))
         .build()?;
 
     let mut new_servers = vec![];
@@ -191,20 +193,24 @@ enum ProgressBarMessage {
     Close,
 }
 
-async fn progress_bar_task(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
+async fn progress_bar_thread(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
     let pb = ProgressBar::new(amount);
     loop {
         match rec.recv().await {
             Some(m) => match m {
                 ProgressBarMessage::Increment => pb.inc(1),
                 ProgressBarMessage::Message(m) => pb.println(m),
-                ProgressBarMessage::Close => pb.finish_with_message("prematurely done scanning")
+                ProgressBarMessage::Close => {
+                    pb.finish_with_message("prematurely done scanning");
+                    return;
+                }
             },
             None => return,
         }
 
         if amount <= pb.position() {
             pb.finish_with_message("finished sending requests");
+            return;
         }
     }
 }
