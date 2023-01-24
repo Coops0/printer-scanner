@@ -6,6 +6,7 @@ use anyhow::{Result};
 use indicatif::ProgressBar;
 use rand::seq::SliceRandom;
 use reqwest::{Client};
+use reqwest::redirect::Policy;
 use thiserror::Error;
 use tokio::{
     fs::File,
@@ -127,6 +128,7 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
 async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<ProgressBarMessage>>) -> Result<Vec<(IpWrapper, NetworkDevice)>> {
     let mut client = Client::builder()
         .danger_accept_invalid_certs(true)
+        .redirect(Policy::none())
         .timeout(Duration::from_secs(2))
         .build()?;
 
@@ -163,15 +165,15 @@ async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<Unbo
     Ok(new_servers)
 }
 
-async fn scan(client: &mut Client, server: &IpWrapper) -> Result<NetworkDevice, ScanError> {
-    let res = client.get(server.url())
+async fn scan(client: &mut Client, ip: &IpWrapper) -> Result<NetworkDevice, ScanError> {
+    let res = client.get(ip.url())
         .send()
         .await;
 
     let error = match res {
         Ok(o) => {
             let text = o.text().await.unwrap_or_default();
-            return Ok(NetworkDevice::from_response(text));
+            return Ok(NetworkDevice::from_response(ip, text));
         }
         Err(e) => e,
     };

@@ -21,7 +21,7 @@ pub struct Args {
     ip_subnet: String,
 
     /// Display a progress bar
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = true)]
     progress_bar: bool,
 
     /// Print all ips to a file for debugging
