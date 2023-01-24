@@ -35,7 +35,7 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
         .map(IpWrapper)
         .collect::<Vec<IpWrapper>>();
 
-    if args.print_all {
+    if args.save_all {
         let _ = tokio::fs::remove_file("./all_ips.txt").await;
 
         let _ = File::create("./all_ips.txt")

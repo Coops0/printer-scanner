@@ -26,7 +26,7 @@ pub struct Args {
 
     /// Print all ips to a file for debugging
     #[arg(short, long)]
-    print_all: bool
+    save_all: bool
 }
 
 #[tokio::main]
