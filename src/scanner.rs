@@ -1,19 +1,17 @@
-use std::{
-    fmt::{Display, Formatter},
-    time::Duration,
-};
-use anyhow::{Result};
-use indicatif::ProgressBar;
+use std::time::Duration;
+
+use anyhow::{bail, Result};
 use rand::seq::SliceRandom;
-use reqwest::{Client};
-use reqwest::redirect::Policy;
-use thiserror::Error;
+use reqwest::{
+    Client,
+    redirect::Policy,
+};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
     sync::{
         mpsc,
-        mpsc::{UnboundedReceiver, UnboundedSender},
+        mpsc::UnboundedSender,
     },
     task::{
         self,
@@ -23,36 +21,22 @@ use tokio::{
 
 use crate::{
     Args,
-    subnet_generator,
-    identifier::NetworkDevice,
+    id::devices::NetworkDevice,
+    threads,
+    threads::{AppendMessage, ProgressBarMessage},
+    util::{IpWrapper, ScanError, subnet_generator},
 };
 
 pub async fn scan_for_devices(args: Args) -> Result<()> {
-    // let net: Ipv4Net = args.ip_subnet.parse()?;
     let net = subnet_generator(args.ip_subnet.clone());
 
-    let hosts = net//.hosts()
+    let hosts = net
         .into_iter()
         .map(IpWrapper)
         .collect::<Vec<IpWrapper>>();
 
-    if args.save_all {
-        let _ = tokio::fs::remove_file("./all_ips.txt").await;
-
-        let _ = File::create("./all_ips.txt")
-            .await
-            .unwrap()
-            .write(
-                hosts
-                    .iter()
-                    .map(|i| i.0.clone())
-                    .collect::<Vec<String>>()
-                    .join("\n")
-                    .as_bytes()
-            )
-            .await?;
-
-        println!("Printed all ips!");
+    if hosts.len() < args.threads {
+        bail!("more threads than ips to scan");
     }
 
     let chunks = hosts.chunks(hosts.len() / args.threads)
@@ -74,21 +58,38 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
             .collect::<Vec<String>>()
             .join(", ");
 
-        println!("10 randomly sampled generated IPs: {sample}")
+        println!("10 randomly sampled generated IPs: {sample}");
     }
 
-    let mut progress_bar_scanner = None;
-    let mut progress_bar_task = None;
+    let mut progress_bar = None;
     if args.progress_bar {
         let (sender, receiver) = mpsc::unbounded_channel();
-        progress_bar_scanner = Some(sender);
 
-        progress_bar_task = Some(task::spawn(progress_bar_thread(hosts.len() as u64, receiver)));
+        progress_bar = Some(
+            (sender, task::spawn(threads::progress_bar_thread(hosts.len() as u64, receiver)))
+        );
+    }
+
+    let mut appender = None;
+    if args.append_file {
+        let (sender, receiver) = mpsc::unbounded_channel();
+
+        appender = Some((sender, task::spawn(threads::append_thread(receiver))));
     }
 
     let mut set = JoinSet::new();
     for servers in chunks {
-        set.spawn(scanner_thread(servers.to_vec(), args.clone(), progress_bar_scanner.clone()));
+        let mut pb = None;
+        if let Some((s, _)) = &progress_bar {
+            pb = Some(s.clone());
+        }
+
+        let mut ap = None;
+        if let Some((a, _)) = &appender {
+            ap = Some(a.clone());
+        }
+
+        set.spawn(scanner_thread(servers.to_vec(), args.clone(), pb, ap));
     }
 
     let mut devices = vec![];
@@ -98,38 +99,49 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
         }
     }
 
-    if let Some(s) = progress_bar_scanner {
-        let _ = s.send(ProgressBarMessage::Close);
-        let _ = progress_bar_task.unwrap().await;
+    if let Some((sender, t)) = progress_bar {
+        let _ = sender.send(ProgressBarMessage::Close);
+        let _ = t.await;
+    }
+
+    if let Some((sender, t)) = appender {
+        let _ = sender.send(AppendMessage::Close);
+        let _ = t.await;
     }
 
     let devices = devices.concat();
     println!("-- Finished, found {} valid devices --", devices.len());
 
-    let content = devices
-        .iter()
-        .map(|d| format!("{}:{}", d.0, d.1))
-        .collect::<Vec<String>>()
-        .join("\n");
+    if !args.append_file {
+        let content = devices
+            .iter()
+            .map(|d| format!("{}:{}", d.0, d.1))
+            .collect::<Vec<String>>()
+            .join("\n");
 
-    let _ = tokio::fs::remove_file("./devices.txt").await;
+        let _ = tokio::fs::remove_file("./devices.txt").await;
 
-    let _ = File::create("./devices.txt")
-        .await
-        .unwrap()
-        .write(content.as_bytes())
-        .await?;
+        let _ = File::create("./devices.txt")
+            .await?
+            .write(content.as_bytes())
+            .await?;
 
-    println!("Successfully wrote to ./devices.txt");
+        println!("Successfully wrote to ./devices.txt");
+    }
 
     Ok(())
 }
 
-async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<UnboundedSender<ProgressBarMessage>>) -> Result<Vec<(IpWrapper, NetworkDevice)>> {
+async fn scanner_thread(
+    servers: Vec<IpWrapper>,
+    args: Args,
+    sender: Option<UnboundedSender<ProgressBarMessage>>,
+    appender: Option<UnboundedSender<AppendMessage>>,
+) -> Result<Vec<(IpWrapper, NetworkDevice)>> {
     let mut client = Client::builder()
         .danger_accept_invalid_certs(true)
         .redirect(Policy::none())
-        .timeout(Duration::from_secs(2))
+        .timeout(Duration::from_millis(args.timeout))
         .build()?;
 
     let mut new_servers = vec![];
@@ -138,6 +150,14 @@ async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<Unbo
         let log = match scan(&mut client, &server).await {
             Ok(t) => {
                 let m = format!("Valid device type of {t} on {}", server.url());
+                if let Some(ref a) = appender {
+                    let _ = a.send(
+                        AppendMessage::Amendment(
+                            format!("{}:{t}\n", server.0)
+                        )
+                    );
+                }
+
                 new_servers.push((server.clone(), t.clone()));
 
                 m
@@ -150,7 +170,7 @@ async fn scanner_thread(servers: Vec<IpWrapper>, args: Args, sender: Option<Unbo
                         String::new()
                     }
                 }
-                _ => format!("{server} {e}")
+                ScanError::OtherError(_) => format!("{server} {e}")
             }
         };
 
@@ -187,58 +207,4 @@ async fn scan(client: &mut Client, ip: &IpWrapper) -> Result<NetworkDevice, Scan
     }
 
     Err(ScanError::OtherError(error))
-}
-
-enum ProgressBarMessage {
-    Increment,
-    Message(String),
-    Close,
-}
-
-async fn progress_bar_thread(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
-    let pb = ProgressBar::new(amount);
-    loop {
-        match rec.recv().await {
-            Some(m) => match m {
-                ProgressBarMessage::Increment => pb.inc(1),
-                ProgressBarMessage::Message(m) => pb.println(m),
-                ProgressBarMessage::Close => {
-                    pb.finish_with_message("prematurely done scanning");
-                    return;
-                }
-            },
-            None => return,
-        }
-
-        if amount <= pb.position() {
-            pb.finish_with_message("finished sending requests");
-            return;
-        }
-    }
-}
-
-
-#[derive(Clone)]
-pub struct IpWrapper(pub String);
-
-impl IpWrapper {
-    pub fn url(&self) -> String {
-        format!("https://{}", self.0)
-    }
-}
-
-impl Display for IpWrapper {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-#[derive(Error, Debug)]
-enum ScanError {
-    #[error("timeout occurred after 10s")]
-    Timeout,
-    #[error("connection failed")]
-    Connection,
-    #[error("other weird web error {0:?}")]
-    OtherError(reqwest::Error),
 }

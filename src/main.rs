@@ -3,13 +3,15 @@ use clap::Parser;
 use crate::scanner::scan_for_devices;
 
 mod scanner;
-mod identifier;
+mod threads;
+mod util;
+mod id;
 
 #[derive(Parser, Debug, Clone)]
 #[command(long_about = None)]
 pub struct Args {
     /// Amount of threads to simultaneously request on
-    #[arg(short, long, default_value_t = 10)]
+    #[arg(short, long, default_value_t = 20)]
     threads: usize,
 
     /// Log failures as well
@@ -24,9 +26,13 @@ pub struct Args {
     #[arg(short, long, default_value_t = true)]
     progress_bar: bool,
 
-    /// Print all ips to a file for debugging
+    /// Append ips to file after each success instead of all at the end
     #[arg(short, long)]
-    save_all: bool
+    append_file: bool,
+
+    /// Timeout for scanning (in ms)
+    #[arg(short, long, default_value_t = 2000)]
+    timeout: u64,
 }
 
 #[tokio::main]
@@ -34,32 +40,4 @@ async fn main() -> Result<()> {
     let args = Args::parse();
 
     scan_for_devices(args).await
-    // for printer in printers {
-    //     println!("{printer}{PRINTER_PAGE}");
-    // }
-}
-
-fn subnet_generator(ip: String) -> Vec<String> {
-    let mut current_passthrough = vec![];
-
-    if !ip.contains('x') {
-        return vec![ip];
-    }
-
-    for i in 1..=255 {
-        current_passthrough.push(ip.replacen('x', i.to_string().as_str(), 1));
-    }
-
-    while current_passthrough[0].contains('x') {
-        let mut temp = vec![];
-        for p in current_passthrough {
-            for i in 1..=255 {
-                temp.push(p.replacen('x', i.to_string().as_str(), 1));
-            }
-        }
-
-        current_passthrough = temp;
-    }
-
-    current_passthrough
 }
