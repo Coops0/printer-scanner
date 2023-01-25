@@ -31,7 +31,7 @@ pub struct Args {
     append_file: bool,
 
     /// Timeout for scanning (in ms)
-    #[arg(short, long, default_value_t = 2000)]
+    #[arg(long, default_value_t = 2000)]
     timeout: u64,
 }
 
