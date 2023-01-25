@@ -42,9 +42,7 @@ impl PageElement for DellController {
     fn page_element(&self, ip: &IpWrapper) -> Option<String> {
         let s = match self {
             DellController::Eight => format!("<a href=\"https://{}/start.html\">here</a>", ip.0),
-            DellController::Nine => {
-                format!("<a href=\"https://{}/restgui/start.html\">here</a>", ip.0)
-            }
+            DellController::Nine => format!("<a href=\"https://{}/restgui/start.html\">here</a>", ip.0)
         };
 
         Some(s)
