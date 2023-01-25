@@ -1,9 +1,5 @@
 use indicatif::ProgressBar;
-use tokio::{
-    fs::File,
-    io::AsyncWriteExt,
-    sync::mpsc::UnboundedReceiver
-};
+use tokio::{fs::File, io::AsyncWriteExt, sync::mpsc::UnboundedReceiver};
 
 pub enum ProgressBarMessage {
     Increment,
@@ -41,9 +37,7 @@ pub enum AppendMessage {
 pub async fn append_thread(mut rec: UnboundedReceiver<AppendMessage>) {
     let _ = tokio::fs::remove_file("./devices.txt").await;
 
-    let mut f = File::create("./devices.txt")
-        .await
-        .unwrap();
+    let mut f = File::create("./devices.txt").await.unwrap();
 
     loop {
         match rec.recv().await {

@@ -2,44 +2,33 @@ use std::time::Duration;
 
 use anyhow::{bail, Result};
 use rand::seq::SliceRandom;
-use reqwest::{
-    Client,
-    redirect::Policy,
-};
+use reqwest::{redirect::Policy, Client};
 use tokio::{
     fs::File,
     io::AsyncWriteExt,
-    sync::{
-        mpsc,
-        mpsc::UnboundedSender,
-    },
-    task::{
-        self,
-        JoinSet,
-    },
+    sync::{mpsc, mpsc::UnboundedSender},
+    task::{self, JoinSet},
 };
 
 use crate::{
-    Args,
     id::devices::NetworkDevice,
     threads,
     threads::{AppendMessage, ProgressBarMessage},
-    util::{IpWrapper, ScanError, subnet_generator},
+    util::{subnet_generator, IpWrapper, ScanError},
+    Args,
 };
 
 pub async fn scan_for_devices(args: Args) -> Result<()> {
     let net = subnet_generator(args.ip_subnet.clone());
 
-    let hosts = net
-        .into_iter()
-        .map(IpWrapper)
-        .collect::<Vec<IpWrapper>>();
+    let hosts = net.into_iter().map(IpWrapper).collect::<Vec<IpWrapper>>();
 
     if hosts.len() < args.threads {
         bail!("more threads than ips to scan");
     }
 
-    let chunks = hosts.chunks(hosts.len() / args.threads)
+    let chunks = hosts
+        .chunks(hosts.len() / args.threads)
         .collect::<Vec<&[IpWrapper]>>();
 
     let avg = {
@@ -65,9 +54,10 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
     if args.progress_bar {
         let (sender, receiver) = mpsc::unbounded_channel();
 
-        progress_bar = Some(
-            (sender, task::spawn(threads::progress_bar_thread(hosts.len() as u64, receiver)))
-        );
+        progress_bar = Some((
+            sender,
+            task::spawn(threads::progress_bar_thread(hosts.len() as u64, receiver)),
+        ));
     }
 
     let mut appender = None;
@@ -151,11 +141,7 @@ async fn scanner_thread(
             Ok(t) => {
                 let m = format!("Valid device type of {t} on {}", server.url());
                 if let Some(ref a) = appender {
-                    let _ = a.send(
-                        AppendMessage::Amendment(
-                            format!("{}:{t}\n", server.0)
-                        )
-                    );
+                    let _ = a.send(AppendMessage::Amendment(format!("{}:{t}\n", server.0)));
                 }
 
                 new_servers.push((server.clone(), t.clone()));
@@ -170,8 +156,8 @@ async fn scanner_thread(
                         String::new()
                     }
                 }
-                ScanError::OtherError(_) => format!("{server} {e}")
-            }
+                ScanError::OtherError(_) => format!("{server} {e}"),
+            },
         };
 
         if let Some(ref sender) = sender {
@@ -186,9 +172,7 @@ async fn scanner_thread(
 }
 
 async fn scan(client: &mut Client, ip: &IpWrapper) -> Result<NetworkDevice, ScanError> {
-    let res = client.get(ip.url())
-        .send()
-        .await;
+    let res = client.get(ip.url()).send().await;
 
     let error = match res {
         Ok(o) => {

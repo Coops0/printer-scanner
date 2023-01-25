@@ -1,5 +1,5 @@
-
 use enum_iterator::{all, Sequence};
+
 use crate::id::PageElement;
 use crate::util::IpWrapper;
 
@@ -59,6 +59,7 @@ pub enum DellController {
 }
 
 impl NetworkDevice {
+    #[allow(clippy::needless_pass_by_value)]
     pub fn from_response(ip: &IpWrapper, text: String) -> Self {
         for t in NetworkDevice::all() {
             if let Some(e) = t.page_element(ip) {
@@ -99,24 +100,36 @@ impl NetworkDevice {
                 NetworkDevice::MitsubishiAC,
                 NetworkDevice::VirataEmWeb,
                 NetworkDevice::MiVoice,
-                NetworkDevice::Fortinet
+                NetworkDevice::Fortinet,
             ],
             all::<Printer>()
                 .collect::<Vec<_>>()
                 .into_iter()
                 .map(NetworkDevice::HpPrinter)
                 .collect::<Vec<_>>(),
-        ].concat()
+        ]
+        .concat()
     }
 }
 
 impl Printer {
     #[allow(dead_code)]
     pub fn is_new(&self) -> bool {
-        matches!(self, Printer::LaserJetMfpM528 | Printer::ColorLaserJetFlowMfpM681 | Printer::LaserJetMfpM635 | Printer::OfficeJetPro8720)
+        matches!(
+            self,
+            Printer::LaserJetMfpM528
+                | Printer::ColorLaserJetFlowMfpM681
+                | Printer::LaserJetMfpM635
+                | Printer::OfficeJetPro8720
+        )
     }
 
     pub fn is_unknown(&self) -> bool {
-        matches!(self, Printer::UnknownOfficeJet | Printer::UnknownLaserJet | Printer::UnknownJavascriptPrinter)
+        matches!(
+            self,
+            Printer::UnknownOfficeJet
+                | Printer::UnknownLaserJet
+                | Printer::UnknownJavascriptPrinter
+        )
     }
 }

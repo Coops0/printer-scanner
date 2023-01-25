@@ -10,29 +10,19 @@ impl PageElement for NetworkDevice {
             NetworkDevice::VirataEmWeb => "Access Denied. Your IP Address cannot access this device",
             NetworkDevice::MitsubishiAC => "MITSUBISHI Air Conditioning Control System",
             NetworkDevice::MiVoice => "MiVoice Office Communications Platform",
-            _ => "",
+
+            NetworkDevice::HpPrinter(p) => return p.page_element(ip),
+            NetworkDevice::IntegrateDellRemoveAccessController(d) => return d.page_element(ip),
+            NetworkDevice::BuildingOperations(b) => return b.page_element(ip),
+            NetworkDevice::Fortinet => return Some(format!("<a href=\"https://{ip}/ng\">here</a>.</p")),
+
+            NetworkDevice::Unidentified => "",
         };
-
-        if let NetworkDevice::HpPrinter(p) = self {
-            return p.page_element(ip);
-        }
-
-        if let NetworkDevice::IntegrateDellRemoveAccessController(d) = self {
-            return d.page_element(ip);
-        }
-
-        if let NetworkDevice::BuildingOperations(b) = self {
-            return b.page_element(ip);
-        }
-
-        if matches!(self, NetworkDevice::Fortinet) {
-            return Some(format!("<a href=\"https://{ip}/ng\">here</a>.</p"));
-        }
 
         if res.is_empty() {
             None
         } else {
-            Some(res.to_string())
+            Some(res.to_owned())
         }
     }
 }
@@ -44,7 +34,7 @@ impl PageElement for BuildingPageType {
             BuildingPageType::Controller => "h5.02c.518 0 .918-.187 1.255-.56.12-.147.28",
         };
 
-        Some(s.to_string())
+        Some(s.to_owned())
     }
 }
 
@@ -52,7 +42,9 @@ impl PageElement for DellController {
     fn page_element(&self, ip: &IpWrapper) -> Option<String> {
         let s = match self {
             DellController::Eight => format!("<a href=\"https://{}/start.html\">here</a>", ip.0),
-            DellController::Nine => format!("<a href=\"https://{}/restgui/start.html\">here</a>", ip.0),
+            DellController::Nine => {
+                format!("<a href=\"https://{}/restgui/start.html\">here</a>", ip.0)
+            }
         };
 
         Some(s)

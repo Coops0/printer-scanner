@@ -1,5 +1,5 @@
-use thiserror::Error;
 use std::fmt::{Display, Formatter};
+use thiserror::Error;
 
 pub fn subnet_generator(ip: String) -> Vec<String> {
     let mut current_passthrough = vec![];
@@ -25,7 +25,6 @@ pub fn subnet_generator(ip: String) -> Vec<String> {
 
     current_passthrough
 }
-
 
 #[derive(Clone)]
 pub struct IpWrapper(pub String);

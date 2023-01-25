@@ -1,11 +1,11 @@
+use crate::scanner::scan_for_devices;
 use anyhow::Result;
 use clap::Parser;
-use crate::scanner::scan_for_devices;
 
+mod id;
 mod scanner;
 mod threads;
 mod util;
-mod id;
 
 #[derive(Parser, Debug, Clone)]
 #[command(long_about = None)]

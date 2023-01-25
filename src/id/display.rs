@@ -1,16 +1,20 @@
-use std::fmt::{Display, Formatter};
 use crate::id::devices::{BuildingPageType, DellController, NetworkDevice, Printer};
+use std::fmt::{Display, Formatter};
 
 impl Display for NetworkDevice {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         match self {
-            NetworkDevice::IntegrateDellRemoveAccessController(v) => f.write_fmt(format_args!("Integrate Dell Remove Access Controller {v}")),
+            NetworkDevice::IntegrateDellRemoveAccessController(v) => {
+                f.write_fmt(format_args!("Integrate Dell Remove Access Controller {v}"))
+            }
             NetworkDevice::CiscoRouter => f.write_str("Cisco Router"),
             NetworkDevice::HpPrinter(p) => f.write_fmt(format_args!("HP Printer {p}")),
             NetworkDevice::FileMaker => f.write_str("FileMaker Database Server Website"),
             NetworkDevice::VirataEmWeb => f.write_str("Viarta EmWeb"),
             NetworkDevice::MitsubishiAC => f.write_str("Mitsubishi Air Conditioning"),
-            NetworkDevice::BuildingOperations(d) => f.write_fmt(format_args!("Building Operations {d}")),
+            NetworkDevice::BuildingOperations(d) => {
+                f.write_fmt(format_args!("Building Operations {d}"))
+            }
             NetworkDevice::MiVoice => f.write_str("MiVoice"),
             NetworkDevice::Fortinet => f.write_str("Fortinet"),
             NetworkDevice::Unidentified => f.write_str("Unidentified"),
