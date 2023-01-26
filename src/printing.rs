@@ -1,16 +1,38 @@
-use anyhow::Result;
+use anyhow::{bail, Result};
 use ipp::{
     attribute::IppAttribute,
     model::DelimiterTag,
     payload::IppPayload,
     prelude::{AsyncIppClient, IppOperationBuilder, Uri},
     value::IppValue,
+    model::StatusCode
 };
 
 use crate::PrintArgs;
 
+const WHITELISTED_EXT: &[&'static str] = &[
+    ".pdf",
+    ".xps",
+    ".bmp",
+    ".jpeg",
+    ".gif",
+    ".tiff",
+    ".rtf",
+    ".txt"
+];
+
 pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     // todo fix this blocking call
+    let f = args.file.to_lowercase();
+
+    if !WHITELISTED_EXT.iter().any(|e| f.ends_with(e)) {
+        if args.bypass_ext {
+            println!("Bypassing invalid file extension...")
+        } else {
+            bail!("not whitelisted file ext")
+        }
+    }
+
     let payload = IppPayload::new(std::fs::File::open(args.file)?);
 
     let mut ip = args.ip.clone();
@@ -45,6 +67,10 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
 
     for attr in attrs {
         println!("{}: {}", attr.name(), attr.value());
+    }
+
+    if response.header().status_code() != StatusCode::SuccessfulOk {
+        bail!("non ok status code")
     }
 
     Ok(())

@@ -52,6 +52,10 @@ pub struct PrintArgs {
     /// number of copies to print
     #[arg(short, long, default_value_t = 1)]
     copies: u32,
+
+    /// bypass file extension check
+    #[arg(short, long)]
+    bypass_ext: bool,
 }
 
 #[derive(Parser, Debug, Clone)]
