@@ -15,10 +15,10 @@ use crate::{
     threads,
     threads::{AppendMessage, ProgressBarMessage},
     util::{subnet_generator, IpWrapper, ScanError},
-    Args,
+    ScannerArgs,
 };
 
-pub async fn scan_for_devices(args: Args) -> Result<()> {
+pub async fn scan_for_devices(args: ScannerArgs) -> Result<()> {
     let net = subnet_generator(args.ip_subnet.clone());
 
     let hosts = net.into_iter().map(IpWrapper).collect::<Vec<IpWrapper>>();
@@ -124,7 +124,7 @@ pub async fn scan_for_devices(args: Args) -> Result<()> {
 
 async fn scanner_thread(
     servers: Vec<IpWrapper>,
-    args: Args,
+    args: ScannerArgs,
     sender: Option<UnboundedSender<ProgressBarMessage>>,
     appender: Option<UnboundedSender<AppendMessage>>,
 ) -> Result<Vec<(IpWrapper, NetworkDevice)>> {

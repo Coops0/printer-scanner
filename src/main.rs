@@ -1,9 +1,9 @@
-use std::env;
+
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
-use crate::printing::{ipp_info, print, print_ipp};
+use crate::printing::print_ipp;
 use crate::scanner::scan_for_devices;
 
 mod id;
@@ -12,9 +12,9 @@ mod threads;
 mod util;
 mod printing;
 
-#[derive(Parser, Debug, Clone)]
+#[derive(clap::Args, Debug, Clone)]
 #[command(long_about = None)]
-pub struct Args {
+pub struct ScannerArgs {
     /// Amount of threads to simultaneously request on
     #[arg(short, long, default_value_t = 20)]
     threads: usize,
@@ -40,25 +40,41 @@ pub struct Args {
     timeout: u64,
 }
 
+#[derive(clap::Args, Debug, Clone)]
+#[command(long_about = None)]
+pub struct PrintArgs {
+    /// ip to print to, e.x. http://10.208.2.22
+    #[arg(short, long)]
+    ip: String,
+
+    // file path to print, can be local or absolute
+    #[arg(short, long)]
+    file: String,
+
+    /// number of copies to print
+    #[arg(short, long, default_value_t = 1)]
+    copies: u32
+}
+
+#[derive(Parser, Debug, Clone)]
+#[command(long_about = None)]
+struct Args {
+    #[command(subcommand)]
+    action: Action,
+}
+
+#[derive(Subcommand, Clone, Debug)]
+enum Action {
+    Scan(ScannerArgs),
+    Print(PrintArgs)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    let args: Vec<String> = env::args().collect();
-
-    match args.get(1).map(String::clone).unwrap_or_default().as_str() {
-        "printcmd" => {
-            let e = print(&args[2], &args[3]).await?;
-            println!("{e}");
-            return Ok(());
-        }
-        "getinfo" => {
-            return ipp_info(&args[2]).await;
-        }
-        "print" => {
-            return print_ipp(&args[2], &args[3]).await;
-        }
-        _ => {}
-    }
-
     let args = Args::parse();
-    scan_for_devices(args).await
+
+    match args.action {
+        Action::Scan(s) => scan_for_devices(s).await,
+        Action::Print(p) => print_ipp(p).await,
+    }
 }

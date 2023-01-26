@@ -1,57 +1,43 @@
-use std::env;
-use std::env::args;
-use std::process::ExitStatus;
+
+
+
 
 use anyhow::Result;
-use ipp::attribute::{IppAttribute, IppAttributeGroup};
-use ipp::model::{DelimiterTag, IppVersion, Operation};
+use ipp::attribute::{IppAttribute};
+use ipp::model::{DelimiterTag};
 use ipp::payload::IppPayload;
 use ipp::prelude::{AsyncIppClient, IppOperationBuilder, Uri};
-use ipp::request::IppRequestResponse;
-use tokio::fs;
-use tokio::io::AsyncReadExt;
-use tokio::process::Command;
 
-pub async fn print(printer_system_name: &str, file_path: &str) -> Result<ExitStatus> {
-    Ok(
-        Command::new("lp")
-            .arg("-d")
-            .arg(printer_system_name)
-            .arg(file_path)
-            .spawn()?
-            .wait()
-            .await?
-    )
-}
+use ipp::value::IppValue;
 
-pub async fn ipp_info(printer_ip: &str) -> Result<()> {
-    let uri: Uri = Uri::try_from(printer_ip)?;
-    let req = IppRequestResponse::new(
-        IppVersion::v1_1(),
-        Operation::GetPrinterAttributes,
-        Some(uri.clone()),
-    );
 
-    let client = AsyncIppClient::new(uri);
-    let resp = client.send(req).await?;
-    if resp.header().status_code().is_success() {
-        println!("{:?}", resp.attributes());
+
+use crate::PrintArgs;
+
+pub async fn print_ipp(args: PrintArgs) -> Result<()> {
+    // todo fix this blocking call
+    let payload = IppPayload::new(std::fs::File::open(args.file)?);
+
+    let mut ip = args.ip.clone();
+    if !ip.starts_with("http") {
+        ip = format!("http://{ip}");
     }
 
-    Ok(())
-}
-
-pub async fn print_ipp(printer_ip: &str, file_path: &str) -> Result<()> {
-    let payload = IppPayload::new(std::fs::File::open(file_path)?);
-
-    let uri: Uri = Uri::try_from(printer_ip)?;
+    let uri: Uri = Uri::try_from(ip.clone())?;
 
     let mut builder = IppOperationBuilder::print_job(uri.clone(), payload)
         .user_name("noname")
-        .job_title(printer_ip);
+        .job_title(ip);
+
+    if args.copies != 1 {
+        builder = builder.attribute(
+            IppAttribute::new("copies", IppValue::Integer(args.copies as i32))
+        );
+    }
 
     let operation = builder.build();
     let client = AsyncIppClient::new(uri);
+
     let response = client.send(operation).await?;
 
     println!("IPP status code: {}", response.header().status_code());
