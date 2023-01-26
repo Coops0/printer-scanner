@@ -20,7 +20,6 @@ use crate::{
 
 pub async fn scan_for_devices(args: ScannerArgs) -> Result<()> {
     let net = subnet_generator(args.ip_subnet.clone());
-
     let hosts = net.into_iter().map(IpWrapper).collect::<Vec<IpWrapper>>();
 
     if hosts.len() < args.threads {

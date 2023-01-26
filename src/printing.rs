@@ -10,12 +10,17 @@ use ipp::{
 
 use crate::PrintArgs;
 
+// PNG, HEIC, and TIFF print garbage spam
+// jpg/jpeg says unsupported
+// below extensions are manually checked and verified to work
+// I would convert any image to a pdf
 const WHITELISTED_EXT: &[&'static str] = &[
-    ".pdf", ".xps", ".bmp", ".jpeg", ".gif", ".tiff", ".rtf", ".txt",
+    ".docx",
+    ".pdf",
+    ".txt"
 ];
 
 pub async fn print_ipp(args: PrintArgs) -> Result<()> {
-    // todo fix this blocking call
     let f = args.file.to_lowercase();
 
     if !WHITELISTED_EXT.iter().any(|e| f.ends_with(e)) {
@@ -26,6 +31,7 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
         }
     }
 
+    // todo fix this blocking call
     let payload = IppPayload::new(std::fs::File::open(args.file)?);
 
     let mut ip = args.ip.clone();
