@@ -1,11 +1,16 @@
-use crate::scanner::scan_for_devices;
+use std::env;
+
 use anyhow::Result;
 use clap::Parser;
+
+use crate::printing::print;
+use crate::scanner::scan_for_devices;
 
 mod id;
 mod scanner;
 mod threads;
 mod util;
+mod printing;
 
 #[derive(Parser, Debug, Clone)]
 #[command(long_about = None)]
@@ -37,6 +42,13 @@ pub struct Args {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<String> = env::args().collect();
+    if args.len() == 4 && args[1] == "print" {
+        let e = print(&args[2], &args[3]).await?;
+        println!("{e}");
+        return Ok(());
+    }
+
     let args = Args::parse();
 
     scan_for_devices(args).await
