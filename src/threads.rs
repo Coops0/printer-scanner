@@ -17,7 +17,6 @@ pub async fn progress_bar_thread(amount: u64, mut rec: UnboundedReceiver<Progres
                 ProgressBarMessage::Increment => pb.inc(1),
                 ProgressBarMessage::Message(m) => pb.println(m),
                 ProgressBarMessage::Close => {
-                    pb.finish_with_message("prematurely done scanning");
                     cont = false;
                 }
             },

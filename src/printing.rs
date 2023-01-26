@@ -2,23 +2,16 @@ use anyhow::{bail, Result};
 use ipp::{
     attribute::IppAttribute,
     model::DelimiterTag,
+    model::StatusCode,
     payload::IppPayload,
     prelude::{AsyncIppClient, IppOperationBuilder, Uri},
     value::IppValue,
-    model::StatusCode
 };
 
 use crate::PrintArgs;
 
 const WHITELISTED_EXT: &[&'static str] = &[
-    ".pdf",
-    ".xps",
-    ".bmp",
-    ".jpeg",
-    ".gif",
-    ".tiff",
-    ".rtf",
-    ".txt"
+    ".pdf", ".xps", ".bmp", ".jpeg", ".gif", ".tiff", ".rtf", ".txt",
 ];
 
 pub async fn print_ipp(args: PrintArgs) -> Result<()> {
