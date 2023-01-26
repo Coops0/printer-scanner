@@ -3,7 +3,7 @@ use std::env;
 use anyhow::Result;
 use clap::Parser;
 
-use crate::printing::print;
+use crate::printing::{ipp_info, print, print_ipp};
 use crate::scanner::scan_for_devices;
 
 mod id;
@@ -43,13 +43,22 @@ pub struct Args {
 #[tokio::main]
 async fn main() -> Result<()> {
     let args: Vec<String> = env::args().collect();
-    if args.len() == 4 && args[1] == "print" {
-        let e = print(&args[2], &args[3]).await?;
-        println!("{e}");
-        return Ok(());
+
+    match args.get(1).map(String::clone).unwrap_or_default().as_str() {
+        "printcmd" => {
+            let e = print(&args[2], &args[3]).await?;
+            println!("{e}");
+            return Ok(());
+        }
+        "getinfo" => {
+            return ipp_info(&args[2]).await;
+        }
+        "print" => {
+            return print_ipp(&args[2], &args[3]).await;
+        }
+        _ => {}
     }
 
     let args = Args::parse();
-
     scan_for_devices(args).await
 }
