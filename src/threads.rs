@@ -10,19 +10,23 @@ pub enum ProgressBarMessage {
 pub async fn progress_bar_thread(amount: u64, mut rec: UnboundedReceiver<ProgressBarMessage>) {
     let pb = ProgressBar::new(amount);
     loop {
+        let mut cont = true;
+
         match rec.recv().await {
             Some(m) => match m {
                 ProgressBarMessage::Increment => pb.inc(1),
                 ProgressBarMessage::Message(m) => pb.println(m),
                 ProgressBarMessage::Close => {
                     pb.finish_with_message("prematurely done scanning");
-                    return;
+                    cont = false;
                 }
             },
-            None => return,
+            None => {
+                cont = false;
+            }
         }
 
-        if amount <= pb.position() {
+        if !cont || amount <= pb.position() {
             pb.finish_with_message("finished sending requests");
             return;
         }
