@@ -1,5 +1,3 @@
-
-
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 
@@ -7,10 +5,10 @@ use crate::printing::print_ipp;
 use crate::scanner::scan_for_devices;
 
 mod id;
+mod printing;
 mod scanner;
 mod threads;
 mod util;
-mod printing;
 
 #[derive(clap::Args, Debug, Clone)]
 #[command(long_about = None)]
@@ -47,13 +45,13 @@ pub struct PrintArgs {
     #[arg(short, long)]
     ip: String,
 
-    // file path to print, can be local or absolute
+    /// file path to print, can be local or absolute
     #[arg(short, long)]
     file: String,
 
     /// number of copies to print
     #[arg(short, long, default_value_t = 1)]
-    copies: u32
+    copies: u32,
 }
 
 #[derive(Parser, Debug, Clone)]
@@ -63,10 +61,10 @@ struct Args {
     action: Action,
 }
 
-#[derive(Subcommand, Clone, Debug)]
+#[derive(Subcommand, Debug, Clone)]
 enum Action {
     Scan(ScannerArgs),
-    Print(PrintArgs)
+    Print(PrintArgs),
 }
 
 #[tokio::main]

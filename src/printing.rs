@@ -1,16 +1,11 @@
-
-
-
-
 use anyhow::Result;
-use ipp::attribute::{IppAttribute};
-use ipp::model::{DelimiterTag};
-use ipp::payload::IppPayload;
-use ipp::prelude::{AsyncIppClient, IppOperationBuilder, Uri};
-
-use ipp::value::IppValue;
-
-
+use ipp::{
+    attribute::IppAttribute,
+    model::DelimiterTag,
+    payload::IppPayload,
+    prelude::{AsyncIppClient, IppOperationBuilder, Uri},
+    value::IppValue,
+};
 
 use crate::PrintArgs;
 
@@ -30,9 +25,10 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
         .job_title(ip);
 
     if args.copies != 1 {
-        builder = builder.attribute(
-            IppAttribute::new("copies", IppValue::Integer(args.copies as i32))
-        );
+        builder = builder.attribute(IppAttribute::new(
+            "copies",
+            IppValue::Integer(args.copies as i32),
+        ));
     }
 
     let operation = builder.build();
