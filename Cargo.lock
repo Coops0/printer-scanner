@@ -760,6 +760,7 @@ dependencies = [
  "reqwest",
  "thiserror",
  "tokio",
+ "tokio-util",
 ]
 
 [[package]]

@@ -9,6 +9,7 @@ mod printing;
 mod scanner;
 mod threads;
 mod util;
+mod cache;
 
 #[derive(clap::Args, Debug, Clone)]
 #[command(long_about = None)]

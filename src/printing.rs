@@ -1,3 +1,5 @@
+use std::env::args;
+
 use anyhow::{bail, Result};
 use ipp::{
     attribute::IppAttribute,
@@ -7,6 +9,9 @@ use ipp::{
     prelude::{AsyncIppClient, IppOperationBuilder, Uri},
     value::IppValue,
 };
+use ipp::prelude::IppRequestResponse;
+use tokio::fs::File;
+use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::PrintArgs;
 
@@ -14,7 +19,7 @@ use crate::PrintArgs;
 // jpg/jpeg says unsupported
 // below extensions are manually checked and verified to work
 // I would convert any image to a pdf
-const WHITELISTED_EXT: &[&'static str] = &[
+const WHITELISTED_EXT: &[&str] = &[
     ".docx",
     ".pdf",
     ".txt"
@@ -31,31 +36,14 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
         }
     }
 
-    // todo fix this blocking call
-    let payload = IppPayload::new(std::fs::File::open(args.file)?);
+    let payload = IppPayload::new_async(File::open(args.file).await?.compat());
 
     let mut ip = args.ip.clone();
-    if !ip.starts_with("http") {
+    if ip.starts_with("http") {
         ip = format!("http://{ip}");
     }
 
-    let uri: Uri = Uri::try_from(ip.clone())?;
-
-    let mut builder = IppOperationBuilder::print_job(uri.clone(), payload)
-        .user_name("noname")
-        .job_title(ip);
-
-    if args.copies != 1 {
-        builder = builder.attribute(IppAttribute::new(
-            "copies",
-            IppValue::Integer(args.copies as i32),
-        ));
-    }
-
-    let operation = builder.build();
-    let client = AsyncIppClient::new(uri);
-
-    let response = client.send(operation).await?;
+    let response = print(uiri, ip, copies as i32).await?;
 
     println!("IPP status code: {}", response.header().status_code());
 
@@ -73,4 +61,24 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+
+pub async fn print(uri: Uri, ip: String, copies: i32) -> Result<IppRequestResponse> {
+    let mut builder = IppOperationBuilder::print_job(uri.clone(), payload)
+        .user_name("noname")
+        .job_title(ip);
+
+    if args.copies != 1 {
+        builder = builder.attribute(IppAttribute::new(
+            "copies",
+            IppValue::Integer(copies),
+        ));
+    }
+
+    let operation = builder.build();
+    let client = AsyncIppClient::new(uri);
+
+    let response = client.send(operation).await?;
+    Ok(response)
 }
