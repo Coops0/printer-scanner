@@ -38,7 +38,7 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     let mut printer = CachedPrinter::new(ip, None);
     if args.identify_formats {
         println!("Identifying printer formats...");
-        printer.fetch_attributes().await?;
+        printer.fetch_attributes().await.context("fetch attributes failed")?;
 
         let exts = printer.supported_extensions.as_ref().unwrap();
         println!("The printer supports the types -> {exts:?}");
@@ -57,7 +57,7 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     }
 
     let payload = IppPayload::new_async(File::open(args.file).await?.compat());
-    let response = print(&printer, payload, args.copies as i32).await?;
+    let response = print(&printer, payload, args.copies as i32).await.context("failed to print")?;
 
     println!("IPP status code: {}", response.header().status_code());
 
