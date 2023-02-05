@@ -1,6 +1,6 @@
 use std::env::args;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use ipp::{
     attribute::IppAttribute,
     model::DelimiterTag,
@@ -14,6 +14,7 @@ use tokio::fs::File;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
 use crate::PrintArgs;
+use crate::printer::CachedPrinter;
 
 // PNG, HEIC, and TIFF print garbage spam
 // jpg/jpeg says unsupported
@@ -26,24 +27,33 @@ const WHITELISTED_EXT: &[&str] = &[
 ];
 
 pub async fn print_ipp(args: PrintArgs) -> Result<()> {
+    let mut ip = args.ip.clone();
+    if ip.starts_with("http") {
+        ip = ip.replace("http://", "");
+        ip = ip.replace("https://", "");
+    }
+
     let f = args.file.to_lowercase();
+
+    let mut printer = CachedPrinter::new(ip, None);
+    if args.identify_formats {
+        println!("Identifying printer formats...");
+        printer.fetch_attributes().await?;
+
+        let exts = printer.supported_extensions.as_ref().unwrap();
+        println!("The printer supports the types -> {exts:?}");
+    }
 
     if !WHITELISTED_EXT.iter().any(|e| f.ends_with(e)) {
         if args.bypass_ext {
-            println!("Bypassing invalid file extension...")
+            println!("Bypassing invalid file extension...");
         } else {
-            bail!("not whitelisted file ext")
+            bail!("not whitelisted file ext");
         }
     }
 
     let payload = IppPayload::new_async(File::open(args.file).await?.compat());
-
-    let mut ip = args.ip.clone();
-    if ip.starts_with("http") {
-        ip = format!("http://{ip}");
-    }
-
-    let response = print(uiri, ip, copies as i32).await?;
+    let response = print(&printer, payload, args.copies as i32).await?;
 
     println!("IPP status code: {}", response.header().status_code());
 
@@ -64,12 +74,13 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
 }
 
 
-pub async fn print(uri: Uri, ip: String, copies: i32) -> Result<IppRequestResponse> {
+pub async fn print(printer: &CachedPrinter, payload: IppPayload, copies: i32) -> Result<IppRequestResponse> {
+    let uri = printer.uri().context("failed to gen uri")?;
     let mut builder = IppOperationBuilder::print_job(uri.clone(), payload)
         .user_name("noname")
-        .job_title(ip);
+        .job_title(&printer.ip);
 
-    if args.copies != 1 {
+    if copies != 1 {
         builder = builder.attribute(IppAttribute::new(
             "copies",
             IppValue::Integer(copies),

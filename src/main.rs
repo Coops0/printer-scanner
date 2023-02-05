@@ -9,7 +9,7 @@ mod printing;
 mod scanner;
 mod threads;
 mod util;
-mod cache;
+mod printer;
 
 #[derive(clap::Args, Debug, Clone)]
 #[command(long_about = None)]
@@ -57,6 +57,10 @@ pub struct PrintArgs {
     /// bypass file extension check
     #[arg(short, long)]
     bypass_ext: bool,
+
+    /// automatically identify printer accepted formats
+    #[arg(long, default_value_t = true)]
+    identify_formats: bool,
 }
 
 #[derive(Parser, Debug, Clone)]
