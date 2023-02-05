@@ -61,6 +61,9 @@ pub struct PrintArgs {
     /// automatically identify printer accepted formats
     #[arg(long, default_value_t = true)]
     identify_formats: bool,
+
+    #[arg(short, long)]
+    only_detect_formats: bool,
 }
 
 #[derive(Parser, Debug, Clone)]

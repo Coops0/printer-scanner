@@ -42,6 +42,10 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
 
         let exts = printer.supported_extensions.as_ref().unwrap();
         println!("The printer supports the types -> {exts:?}");
+
+        if args.only_detect_formats {
+            return Ok(());
+        }
     }
 
     if !WHITELISTED_EXT.iter().any(|e| f.ends_with(e)) {
