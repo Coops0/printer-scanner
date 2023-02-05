@@ -1,30 +1,22 @@
-use std::env::args;
-
 use anyhow::{bail, Context, Result};
 use ipp::{
     attribute::IppAttribute,
-    model::DelimiterTag,
-    model::StatusCode,
+    model::{DelimiterTag, StatusCode},
     payload::IppPayload,
-    prelude::{AsyncIppClient, IppOperationBuilder, Uri},
+    prelude::{AsyncIppClient, IppOperationBuilder, IppRequestResponse, Uri},
     value::IppValue,
 };
-use ipp::prelude::IppRequestResponse;
 use tokio::fs::File;
 use tokio_util::compat::TokioAsyncReadCompatExt;
 
-use crate::PrintArgs;
 use crate::printer::CachedPrinter;
+use crate::PrintArgs;
 
 // PNG, HEIC, and TIFF print garbage spam
 // jpg/jpeg says unsupported
 // below extensions are manually checked and verified to work
 // I would convert any image to a pdf
-const WHITELISTED_EXT: &[&str] = &[
-    ".docx",
-    ".pdf",
-    ".txt"
-];
+const WHITELISTED_EXT: &[&str] = &[".docx", ".pdf", ".txt"];
 
 pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     let mut ip = args.ip.clone();
@@ -38,7 +30,10 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     let mut printer = CachedPrinter::new(ip, None);
     if args.identify_formats {
         println!("Identifying printer formats...");
-        printer.fetch_attributes().await.context("fetch attributes failed")?;
+        printer
+            .fetch_attributes()
+            .await
+            .context("fetch attributes failed")?;
 
         let exts = printer.supported_extensions.as_ref().unwrap();
         println!("The printer supports the types -> {exts:?}");
@@ -57,7 +52,9 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     }
 
     let payload = IppPayload::new_async(File::open(args.file).await?.compat());
-    let response = print(&printer, payload, args.copies as i32).await.context("failed to print")?;
+    let response = print(&printer, payload, args.copies as i32)
+        .await
+        .context("failed to print")?;
 
     println!("IPP status code: {}", response.header().status_code());
 
@@ -77,18 +74,18 @@ pub async fn print_ipp(args: PrintArgs) -> Result<()> {
     Ok(())
 }
 
-
-pub async fn print(printer: &CachedPrinter, payload: IppPayload, copies: i32) -> Result<IppRequestResponse> {
+pub async fn print(
+    printer: &CachedPrinter,
+    payload: IppPayload,
+    copies: i32,
+) -> Result<IppRequestResponse> {
     let uri = printer.uri().context("failed to gen uri")?;
     let mut builder = IppOperationBuilder::print_job(uri.clone(), payload)
         .user_name("noname")
         .job_title(&printer.ip);
 
     if copies != 1 {
-        builder = builder.attribute(IppAttribute::new(
-            "copies",
-            IppValue::Integer(copies),
-        ));
+        builder = builder.attribute(IppAttribute::new("copies", IppValue::Integer(copies)));
     }
 
     let operation = builder.build();

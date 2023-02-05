@@ -1,13 +1,10 @@
-use std::collections::HashMap;
-
-use anyhow::{bail, Context};
-use ipp::model::DelimiterTag;
-use ipp::prelude::{AsyncIppClient, IppAttribute, IppOperationBuilder, Uri};
-
-use anyhow::Result;
-
 use crate::id::devices::Printer;
-
+use anyhow::{bail, Context, Result};
+use ipp::{
+    model::DelimiterTag,
+    prelude::{AsyncIppClient, IppAttribute, IppOperationBuilder, Uri},
+};
+use std::collections::HashMap;
 
 pub struct CachedPrinter {
     pub ip: String,
@@ -35,6 +32,7 @@ impl CachedPrinter {
 
         let operation = IppOperationBuilder::get_printer_attributes(uri.clone()).build();
         let client = AsyncIppClient::new(uri);
+
         let resp = client.send(operation).await?;
 
         if !resp.header().status_code().is_success() {
@@ -50,15 +48,16 @@ impl CachedPrinter {
             .clone();
 
         if let Some(supported) = &attributes.get(IppAttribute::DOCUMENT_FORMAT_SUPPORTED) {
-            self.supported_extensions = supported.value()
+            self.supported_extensions = supported
+                .value()
                 .as_array()
                 .context("document format supported not in array format")?
                 .iter()
-                .map(|v| v
-                    .as_mime_media_type()
-                    .context("failed to convert value to mime media type")
-                    .map(String::clone)
-                )
+                .map(|v| {
+                    v.as_mime_media_type()
+                        .context("failed to convert value to mime media type")
+                        .map(String::clone)
+                })
                 .collect::<Result<Vec<String>>>()
                 .ok();
         }

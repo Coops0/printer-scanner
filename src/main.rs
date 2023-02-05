@@ -5,11 +5,11 @@ use crate::printing::print_ipp;
 use crate::scanner::scan_for_devices;
 
 mod id;
+mod printer;
 mod printing;
 mod scanner;
 mod threads;
 mod util;
-mod printer;
 
 #[derive(clap::Args, Debug, Clone)]
 #[command(long_about = None)]

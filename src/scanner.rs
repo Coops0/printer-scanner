@@ -1,21 +1,19 @@
-use std::time::Duration;
-
-use anyhow::{bail, Result};
-use rand::seq::SliceRandom;
-use reqwest::{redirect::Policy, Client};
-use tokio::{
-    fs::File,
-    io::AsyncWriteExt,
-    sync::{mpsc, mpsc::UnboundedSender},
-    task::{self, JoinSet},
-};
-
 use crate::{
     id::devices::NetworkDevice,
     threads,
     threads::{AppendMessage, ProgressBarMessage},
     util::{subnet_generator, IpWrapper, ScanError},
     ScannerArgs,
+};
+use anyhow::{bail, Result};
+use rand::seq::SliceRandom;
+use reqwest::{redirect::Policy, Client};
+use std::time::Duration;
+use tokio::{
+    fs::File,
+    io::AsyncWriteExt,
+    sync::{mpsc, mpsc::UnboundedSender},
+    task::{self, JoinSet},
 };
 
 pub async fn scan_for_devices(args: ScannerArgs) -> Result<()> {
